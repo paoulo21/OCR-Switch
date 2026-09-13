@@ -49,10 +49,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: switch-ocr.ovl
-          path: |
-            switch-ocr.ovl
-            switch-overlay/switch-ocr.ovl
-          if-no-files-found: warn
+          path: switch-ocr.ovl
+          if-no-files-found: error
 
       - name: Upload build log
         if: always()
