@@ -44,7 +44,7 @@ bool ScreenCapture::captureJpeg(std::vector<uint8_t>& outJpegBuffer) {
     outJpegBuffer.resize(MAX_JPEG_SIZE);
 
     u64 actualSize = 0;
-    Result rc = capsscCaptureJpegScreenShot(&actualSize, outJpegBuffer.data(), MAX_JPEG_SIZE, ViLayerStack_Default, 100000000ULL);
+    Result rc = capsscCaptureJpegScreenShot(&actualSize, outJpegBuffer.data(), MAX_JPEG_SIZE, ViLayerStack_Default, 100000000LL);
     if (R_SUCCEEDED(rc) && actualSize > 0) {
         outJpegBuffer.resize(actualSize);
         return true;

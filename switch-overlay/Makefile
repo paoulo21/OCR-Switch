@@ -25,22 +25,19 @@ NO_ICON     := 1
 #---------------------------------------------------------------------------------
 ARCH        := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS      := -g -Wall -O2 -ffunction-sections \
-               $(ARCH) $(DEFINES)
+LIBDIRS     := $(PORTLIBS) $(LIBNX)
 
-CFLAGS      += $(INCLUDE) -D__SWITCH__
+INCLUDE     = $(foreach dir,$(INCLUDES),-I$(TOPDIR)/$(dir)) \
+              $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+              -I$(TOPDIR)/$(BUILD)
 
-CXXFLAGS    := $(CFLAGS) -fno-exceptions -std=c++20
+CFLAGS      = -g -Wall -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
+CXXFLAGS    = $(CFLAGS) -fno-exceptions -std=c++20
 
 ASFLAGS     := -g $(ARCH)
 LDFLAGS     = -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 LIBS        := -lnx
-
-#---------------------------------------------------------------------------------
-# list of directories containing libraries
-#---------------------------------------------------------------------------------
-LIBDIRS     := $(PORTLIBS) $(LIBNX)
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 
@@ -67,10 +64,6 @@ export OFILES_BIN := $(addsuffix .o,$(BINFILES))
 export OFILES_SRC := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
 export OFILES     := $(OFILES_BIN) $(OFILES_SRC)
 export HFILES_BIN := $(addsuffix .h,$(subst .,_,$(BINFILES)))
-
-export INCLUDE  := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
-                   $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
-                   -I$(CURDIR)/$(BUILD)
 
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 

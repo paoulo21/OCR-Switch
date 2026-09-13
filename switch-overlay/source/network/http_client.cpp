@@ -103,9 +103,9 @@ static std::vector<int> extractJsonIntArray(const std::string& json, const std::
     std::stringstream ss(sub);
     std::string item;
     while (std::getline(ss, item, ',')) {
-        try {
-            result.push_back(std::stoi(item));
-        } catch (...) {}
+        if (!item.empty()) {
+            result.push_back(std::atoi(item.c_str()));
+        }
     }
     return result;
 }

@@ -35,15 +35,15 @@ Config ConfigManager::load(const std::string& path) {
         if (key == "server_ip") {
             cfg.server_ip = val;
         } else if (key == "server_port") {
-            cfg.server_port = std::stoi(val);
+            cfg.server_port = std::atoi(val.c_str());
         } else if (key == "discovery_port") {
-            cfg.discovery_port = std::stoi(val);
+            cfg.discovery_port = std::atoi(val.c_str());
         } else if (key == "auto_discovery") {
             cfg.auto_discovery = (val == "true" || val == "1" || val == "yes");
         } else if (key == "cursor_speed") {
-            cfg.cursor_speed = std::stoi(val);
+            cfg.cursor_speed = std::atoi(val.c_str());
         } else if (key == "snap_radius") {
-            cfg.snap_radius = std::stoi(val);
+            cfg.snap_radius = std::atoi(val.c_str());
         }
     }
     return cfg;
