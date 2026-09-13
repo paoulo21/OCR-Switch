@@ -13,7 +13,7 @@ public:
         int serverPort,
         const uint8_t* jpegData,
         size_t jpegSize,
-        int timeoutSec = 15
+        int timeoutSec = 6
     );
 
     static bool exportAnki(
@@ -23,7 +23,7 @@ public:
         const std::string& reading,
         const std::vector<std::string>& definitions,
         const std::string& sentence,
-        int timeoutSec = 5
+        int timeoutSec = 3
     );
 };
 

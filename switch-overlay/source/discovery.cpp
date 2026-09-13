@@ -18,13 +18,6 @@ bool DiscoveryClient::discoverServer(int discoveryPort, std::string& outIp, int&
     int broadcastEnable = 1;
     setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable));
 
-    struct sockaddr_in clientAddr;
-    std::memset(&clientAddr, 0, sizeof(clientAddr));
-    clientAddr.sin_family = AF_INET;
-    clientAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    clientAddr.sin_port = 0;
-    bind(sock, (struct sockaddr*)&clientAddr, sizeof(clientAddr));
-
     struct sockaddr_in broadcastAddr;
     std::memset(&broadcastAddr, 0, sizeof(broadcastAddr));
     broadcastAddr.sin_family = AF_INET;
@@ -33,9 +26,9 @@ bool DiscoveryClient::discoverServer(int discoveryPort, std::string& outIp, int&
 
     const char* pingMsg = "DISCOVER_SWITCH_OCR";
     
-    // Poll loop with retries every 750ms up to timeoutMs
+    // Poll loop with retries every 600ms up to timeoutMs
     int elapsed = 0;
-    constexpr int INTERVAL_MS = 750;
+    constexpr int INTERVAL_MS = 600;
     
     while (elapsed < timeoutMs) {
         sendto(sock, pingMsg, std::strlen(pingMsg), 0, (struct sockaddr*)&broadcastAddr, sizeof(broadcastAddr));

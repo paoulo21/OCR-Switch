@@ -39,8 +39,8 @@ bool ScreenCapture::captureJpeg(std::vector<uint8_t>& outJpegBuffer) {
         if (!initialize()) return false;
     }
 
-    // Allocate buffer for 720p/1080p JPEG screenshot (typically <= 512KB)
-    constexpr size_t MAX_JPEG_SIZE = 1024 * 1024;
+    // Allocate buffer for 720p/1080p JPEG screenshot (typically <= 350KB)
+    constexpr size_t MAX_JPEG_SIZE = 512 * 1024;
     outJpegBuffer.resize(MAX_JPEG_SIZE);
 
     u64 actualSize = 0;
