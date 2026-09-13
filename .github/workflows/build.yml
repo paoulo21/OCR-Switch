@@ -7,6 +7,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,29 +20,44 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Compile switch-ocr.ovl
         run: |
           cd switch-overlay
           make clean || true
-          make -j$(nproc) 2>&1 | tee build.log
-          echo "=== Fichiers après compilation ==="
-          ls -la
+          make V=1 2>&1 | tee ../build.log || true
+          echo "=== Contenu du dossier build ==="
+          ls -la build || true
           find . -name "*.ovl" -exec cp -v {} .. \; || true
+          find . -name "*.elf" -exec cp -v {} .. \; || true
           cd ..
-          ls -la *.ovl
+          ls -la
+
+      - name: Push build log to debug branch
+        if: always()
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B build-log-debug
+          git add build.log || true
+          git commit -m "ci: capture build log [skip ci]" || true
+          git push -f origin build-log-debug || true
 
       - name: Upload switch-ocr.ovl artifact
         uses: actions/upload-artifact@v4
         with:
           name: switch-ocr.ovl
-          path: switch-ocr.ovl
-          if-no-files-found: error
+          path: |
+            switch-ocr.ovl
+            switch-overlay/switch-ocr.ovl
+          if-no-files-found: warn
 
-      - name: Upload build log on failure
-        if: failure()
+      - name: Upload build log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: switch-overlay/build.log
+          path: build.log
           if-no-files-found: ignore
