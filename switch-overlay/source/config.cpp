@@ -3,6 +3,8 @@
 #include <sstream>
 #include <algorithm>
 #include <cstdlib>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 
 namespace switch_ocr {
