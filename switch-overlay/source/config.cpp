@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cstdlib>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -20,6 +22,9 @@ Config ConfigManager::load(const std::string& path) {
     Config cfg;
     std::ifstream file(path);
     if (!file.is_open()) {
+        mkdir("/config", 0777);
+        mkdir("/config/switch-ocr", 0777);
+        save(cfg, path);
         return cfg;
     }
 
@@ -66,7 +71,9 @@ bool ConfigManager::save(const Config& config, const std::string& path) {
     std::ofstream file(path);
     if (!file.is_open()) return false;
 
+    file << "; Switch OCR Configuration\n";
     file << "[network]\n";
+    file << "; Renseignez l'IP de votre smartphone/PC (affiche au lancement de start_server.sh)\n";
     file << "server_ip=" << config.server_ip << "\n";
     file << "server_port=" << config.server_port << "\n";
     file << "discovery_port=" << config.discovery_port << "\n";
