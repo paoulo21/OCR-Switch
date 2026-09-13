@@ -8,11 +8,12 @@ set -e
 
 echo "=== [1/4] Mise à jour des paquets Termux ==="
 pkg update -y
-pkg install -y python git libjpeg-turbo
+pkg install -y python git clang libjpeg-turbo freetype
+pkg install -y python-pillow || true
 
 echo "=== [2/4] Installation des dépendances Python ==="
-pip install --upgrade pip
-pip install fastapi uvicorn pydantic pillow requests python-multipart
+pip install fastapi uvicorn pydantic requests python-multipart
+pip install pillow || true
 
 # Tentative d'installation de RapidOCR si architecture compatible
 echo "=== [3/4] Installation optionnelle de RapidOCR (ONNX) ==="
