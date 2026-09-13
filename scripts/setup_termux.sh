@@ -12,12 +12,13 @@ pkg install -y python git clang libjpeg-turbo freetype
 pkg install -y python-pillow || true
 
 echo "=== [2/4] Installation des dépendances Python ==="
-pip install fastapi uvicorn pydantic requests python-multipart
+# Sous Android/Termux, Pydantic v1 (pur Python) évite la compilation lourde de pydantic-core en Rust
+pip install "pydantic<2" "fastapi<=0.125.0" uvicorn requests python-multipart
 pip install pillow || true
 
 # Tentative d'installation de RapidOCR si architecture compatible
 echo "=== [3/4] Installation optionnelle de RapidOCR (ONNX) ==="
-pip install onnxruntime rapidocr-onnxruntime || echo "Note: RapidOCR sera utilisé en mode cloud ou fallback si onnxruntime n'a pas de wheel précompilée sur cette version d'Android."
+pip install onnxruntime rapidocr-onnxruntime 2>/dev/null || echo "Note: RapidOCR sera utilisé en mode cloud ou fallback si onnxruntime n'est pas disponible pour cette version Android."
 
 echo "=== [4/4] Création des dossiers de données ==="
 mkdir -p data/dictionaries
