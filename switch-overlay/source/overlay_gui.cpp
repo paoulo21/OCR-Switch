@@ -1,8 +1,8 @@
-#include "gui/overlay_gui.hpp"
+#include "overlay_gui.hpp"
 #include "config.hpp"
-#include "network/discovery.hpp"
-#include "network/http_client.hpp"
-#include "capture/screen_capture.hpp"
+#include "discovery.hpp"
+#include "http_client.hpp"
+#include "screen_capture.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -1,4 +1,4 @@
-#include "network/discovery.hpp"
+#include "discovery.hpp"
 
 #include <sys/socket.h>
 #include <netinet/in.h>

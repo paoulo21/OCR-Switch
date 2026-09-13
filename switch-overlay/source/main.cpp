@@ -6,8 +6,8 @@
 #include <tesla.hpp>
 #endif
 
-#include "gui/overlay_gui.hpp"
-#include "capture/screen_capture.hpp"
+#include "overlay_gui.hpp"
+#include "screen_capture.hpp"
 
 #ifdef __SWITCH__
 

@@ -1,4 +1,4 @@
-#include "capture/screen_capture.hpp"
+#include "screen_capture.hpp"
 
 #ifdef __SWITCH__
 #include <switch.h>
