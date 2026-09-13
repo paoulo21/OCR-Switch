@@ -21,16 +21,19 @@ jobs:
       - name: Compile switch-ocr.ovl
         run: |
           cd switch-overlay
-          make clean
-          make -j$(nproc)
-          ls -la switch-ocr.ovl
-          cp -v switch-ocr.ovl ../
+          make clean || true
+          make V=1
+          echo "=== Fichiers après compilation ==="
+          ls -la
+          find . -name "*.ovl" -exec cp -v {} .. \; || true
           cd ..
-          chmod 777 switch-ocr.ovl
+          ls -la *.ovl || true
 
       - name: Upload switch-ocr.ovl artifact
         uses: actions/upload-artifact@v4
         with:
           name: switch-ocr.ovl
-          path: switch-ocr.ovl
+          path: |
+            switch-ocr.ovl
+            switch-overlay/switch-ocr.ovl
           if-no-files-found: error

@@ -101,10 +101,11 @@ DEPENDS := $(OFILES:.o=.d)
 all: $(OUTPUT).ovl
 
 $(OUTPUT).ovl: $(OUTPUT).elf
-	@elf2nro $< $@ $(NROFLAGS)
+	elf2nro $< $@
 	@echo "built ... $(notdir $(OUTPUT).ovl)"
 
 $(OUTPUT).elf: $(OFILES)
+	$(LD) $(LDFLAGS) $(OFILES) $(LIBPATHS) $(LIBS) -o $@
 
 $(OFILES_SRC): $(HFILES_BIN)
 
