@@ -4,10 +4,13 @@
 #include <algorithm>
 #include <cstdlib>
 #include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+#ifdef __SWITCH__
+#include <switch.h>
+#include <tesla.hpp>
+#endif
 
 namespace switch_ocr {
 
@@ -20,12 +23,13 @@ static inline std::string trim(const std::string& str) {
 
 Config ConfigManager::load(const std::string& path) {
     Config cfg;
+
+#ifdef __SWITCH__
+    tsl::hlp::doWithSDCardHandle([&]() {
+#endif
     std::ifstream file(path);
     if (!file.is_open()) {
-        mkdir("sdmc:/config", 0777);
-        mkdir("sdmc:/config/switch-ocr", 0777);
-        save(cfg, path);
-        return cfg;
+        return;
     }
 
     std::string line;
@@ -64,12 +68,19 @@ Config ConfigManager::load(const std::string& path) {
             cfg.snap_radius = std::atoi(val.c_str());
         }
     }
+#ifdef __SWITCH__
+    });
+#endif
     return cfg;
 }
 
 bool ConfigManager::save(const Config& config, const std::string& path) {
+    bool ok = false;
+#ifdef __SWITCH__
+    tsl::hlp::doWithSDCardHandle([&]() {
+#endif
     std::ofstream file(path);
-    if (!file.is_open()) return false;
+    if (!file.is_open()) return;
 
     file << "; Switch OCR Configuration\n";
     file << "[network]\n";
@@ -82,8 +93,12 @@ bool ConfigManager::save(const Config& config, const std::string& path) {
     file << "[controls]\n";
     file << "cursor_speed=" << config.cursor_speed << "\n";
     file << "snap_radius=" << config.snap_radius << "\n";
+    ok = true;
+#ifdef __SWITCH__
+    });
+#endif
 
-    return true;
+    return ok;
 }
 
 } // namespace switch_ocr
