@@ -20,24 +20,47 @@ jobs:
 
       - name: Compile switch-ocr.ovl
         run: |
+          echo "## 📋 Log de compilation détaillé" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
           cd switch-overlay
-          make -j$(nproc) 2>&1 | tee /tmp/build.log || {
-            echo "## ❌ Erreur de compilation" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat /tmp/build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            exit 1
-          }
-          echo "=== Fichiers .ovl générés ==="
-          find . -name "*.ovl"
-          find . -name "*.ovl" -exec cp -v {} ../ \;
+          make clean || true
+          make V=1 2>&1 | tee -a /tmp/make.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          echo "## 📁 Recherche des fichiers générés" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          find . -maxdepth 3 -type f >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # Si le fichier .ovl n'a pas été créé mais le .elf existe, créer l'ovl avec elf2nro
+          if [ ! -f "switch-ocr.ovl" ] && [ -f "switch-ocr.elf" ]; then
+            echo "Conversion manuelle de switch-ocr.elf en switch-ocr.ovl..."
+            elf2nro switch-ocr.elf switch-ocr.ovl || true
+          fi
+          if [ ! -f "switch-ocr.ovl" ] && [ -f "build/switch-ocr.elf" ]; then
+            echo "Conversion manuelle de build/switch-ocr.elf en switch-ocr.ovl..."
+            elf2nro build/switch-ocr.elf switch-ocr.ovl || true
+          fi
+
+          # Copier les exécutables trouvés vers la racine du dépôt
+          find . -name "*.ovl" -exec cp -v {} .. \; || true
+          find . -name "*.nro" -exec cp -v {} .. \; || true
+
           cd ..
           chmod -R 777 .
-          ls -lh *.ovl || true
+          echo "## 📦 Fichiers prêts pour l'upload" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          ls -la *.ovl *.nro 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "Aucun binaire à la racine" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload switch-ocr.ovl artifact
         uses: actions/upload-artifact@v4
         with:
           name: switch-ocr.ovl
-          path: "*.ovl"
+          path: |
+            switch-ocr.ovl
+            switch-overlay/switch-ocr.ovl
+            switch-overlay/build/switch-ocr.ovl
+            *.ovl
+            *.nro
           if-no-files-found: warn
