@@ -7,52 +7,33 @@
 #endif
 
 #include "gui/overlay_gui.hpp"
+#include "capture/screen_capture.hpp"
 
 #ifdef __SWITCH__
 
-class FullscreenOcrUI : public tsl::gui::UI {
+class FullscreenOcrGui : public tsl::Gui {
 public:
-    FullscreenOcrUI() {
+    FullscreenOcrGui() {
         m_gui.init();
     }
 
-    virtual ~FullscreenOcrUI() = default;
+    virtual ~FullscreenOcrGui() = default;
 
     virtual tsl::elm::Element* createUI() override {
-        auto rootFrame = new tsl::elm::OverlayFrame("", "");
-        return rootFrame;
+        auto frame = new tsl::elm::OverlayFrame("Switch OCR", "v1.0.0");
+        auto drawer = new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
+            m_gui.render(renderer, x, y, w, h);
+        });
+        frame->setContent(drawer);
+        return frame;
     }
 
     virtual void update() override {
-        u64 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-        u64 keysHeld = hidKeysHeld(CONTROLLER_P1_AUTO);
-
-        // Touch handling
-        hidScanInput();
-        touchPosition touch;
-        u32 touchCount = hidTouchCount();
-        bool touching = (touchCount > 0);
-        int tx = -1, ty = -1;
-        if (touching) {
-            hidTouchRead(&touch, 0);
-            tx = touch.px;
-            ty = touch.py;
-        }
-
-        m_gui.update(keysDown, keysHeld, tx, ty, touching);
+        m_gui.update();
     }
 
-    virtual void draw(tsl::gfx::Renderer* renderer) override {
-        m_gui.render();
-    }
-
-    virtual bool handleInput(u64 keysDown, u64 keysHeld, const HidTouchState& touchPos, HidAnalogStickState joyStickPosLeft, HidAnalogStickState joyStickPosRight) override {
-        // B button exits overlay
-        if (keysDown & HidNpadButton_B) {
-            tsl::goBack();
-            return true;
-        }
-        return false;
+    virtual bool handleInput(u64 keysDown, u64 keysHeld, const HidTouchState &touchPos, HidAnalogStickState leftJoyStick, HidAnalogStickState rightJoyStick) override {
+        return m_gui.handleInput(keysDown, keysHeld, touchPos, leftJoyStick, rightJoyStick);
     }
 
 private:
@@ -62,20 +43,18 @@ private:
 class SwitchOcrOverlay : public tsl::Overlay {
 public:
     virtual void initServices() override {
-        smInitialize();
-        capsInitialize();
+        switch_ocr::ScreenCapture::initialize();
     }
 
     virtual void exitServices() override {
-        capsExit();
-        smExit();
+        switch_ocr::ScreenCapture::exit();
     }
 
     virtual void onShow() override {}
     virtual void onHide() override {}
 
-    virtual std::unique_ptr<tsl::gui::UI> loadInitialUI() override {
-        return std::make_unique<FullscreenOcrUI>();
+    virtual std::unique_ptr<tsl::Gui> loadInitialGui() override {
+        return initially<FullscreenOcrGui>();
     }
 };
 
@@ -86,7 +65,6 @@ int main(int argc, char **argv) {
 #else
 
 int main(int argc, char **argv) {
-    // Non-Switch stub for syntax validation
     return 0;
 }
 

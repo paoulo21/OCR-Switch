@@ -10,15 +10,11 @@ echo "========================================================"
 
 if ! command -v docker &> /dev/null; then
     echo "[ERREUR] Docker n'est pas installé."
-    echo "Vous pouvez compiler le .ovl directement sur GitHub via GitHub Actions."
+    echo "Poussez simplement vos modifications sur GitHub pour obtenir switch-ocr.ovl."
     exit 1
 fi
 
-docker run --rm -v "$DIR":/workspace -w /workspace/switch-overlay devkitpro/devkita64:latest bash -c "
-    git clone https://github.com/WerWolv/libtesla.git /tmp/libtesla && \
-    cd /tmp/libtesla && make install && \
-    cd /workspace/switch-overlay && make
-"
+docker run --rm -v "$DIR":/workspace -w /workspace/switch-overlay devkitpro/devkita64:latest make -j
 
 if [ -f "switch-overlay/switch-ocr.ovl" ]; then
     echo "[SUCCÈS] switch-ocr.ovl généré dans switch-overlay/switch-ocr.ovl !"

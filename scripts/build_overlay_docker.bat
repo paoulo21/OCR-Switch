@@ -6,16 +6,14 @@ echo ========================================================
 where docker >nul 2>nul
 if %errorlevel% neq 0 (
     echo [ERREUR] Docker n'est pas installe ou pas dans le PATH.
-    echo Vous pouvez soit :
-    echo   1. Installer Docker Desktop pour compiler localement.
-    echo   2. Pousser ce projet sur GitHub (le workflow compile automatiquement le .ovl).
-    echo   3. Installer devkitPro sous Windows avec le composant switch-dev.
+    echo Vous pouvez simplement pousser vos modifications sur GitHub :
+    echo le workflow GitHub Actions compile automatiquement switch-ocr.ovl.
     pause
     exit /b 1
 )
 
 cd /d "%~dp0\.."
-docker run --rm -v "%cd%":/workspace -w /workspace/switch-overlay devkitpro/devkita64:latest bash -c "git clone https://github.com/WerWolv/libtesla.git /tmp/libtesla && cd /tmp/libtesla && make install && cd /workspace/switch-overlay && make"
+docker run --rm -v "%cd%":/workspace -w /workspace/switch-overlay devkitpro/devkita64:latest make -j
 
 if exist "switch-overlay\switch-ocr.ovl" (
     echo.

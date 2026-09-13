@@ -15,13 +15,11 @@
 namespace switch_ocr {
 
 OverlayGui::OverlayGui() {
-    m_cursor.x = 640;
+    m_cursor.x = 224;
     m_cursor.y = 360;
 }
 
-OverlayGui::~OverlayGui() {
-    ScreenCapture::exit();
-}
+OverlayGui::~OverlayGui() {}
 
 void OverlayGui::init() {
     m_config = ConfigManager::load();
@@ -36,25 +34,24 @@ void OverlayGui::init() {
         }
     }
 
-    ScreenCapture::initialize();
     triggerScan();
 }
 
 void OverlayGui::triggerScan() {
     m_state = OverlayState::SCANNING;
-    m_statusMessage = "Capture de l'ecran et analyse OCR en cours...";
+    m_statusMessage = "Capture & analyse OCR...";
 
     std::vector<uint8_t> jpeg;
     if (!ScreenCapture::captureJpeg(jpeg)) {
         m_state = OverlayState::ERROR;
-        m_statusMessage = "Erreur: Impossible de capturer l'ecran.";
+        m_statusMessage = "Erreur capture ecran.";
         return;
     }
 
     m_ocrData = HttpClient::performOcr(m_config.server_ip, m_config.server_port, jpeg.data(), jpeg.size());
     if (!m_ocrData.success) {
         m_state = OverlayState::ERROR;
-        m_statusMessage = m_ocrData.error_message.empty() ? "Erreur de connexion au serveur OCR." : m_ocrData.error_message;
+        m_statusMessage = m_ocrData.error_message.empty() ? "Serveur injoignable." : m_ocrData.error_message;
         return;
     }
 
@@ -96,8 +93,8 @@ void OverlayGui::triggerAnkiMining() {
     );
 
     m_state = OverlayState::MINING_NOTIFICATION;
-    m_statusMessage = ok ? "Mot exporte vers Anki avec succes !" : "Echec de l'export Anki (verifiez le serveur).";
-    m_notificationTimer = 120; // Show toast for ~2 seconds
+    m_statusMessage = ok ? "Mot exporte vers Anki !" : "Erreur export Anki.";
+    m_notificationTimer = 120; // ~2 seconds
 }
 
 void OverlayGui::updateCursorPosition(int dx, int dy) {
@@ -136,28 +133,38 @@ void OverlayGui::selectTokenAt(int x, int y) {
     checkSnapping();
 }
 
-void OverlayGui::update(uint64_t keysDown, uint64_t keysHeld, int touchX, int touchY, bool touching) {
+void OverlayGui::update() {
     if (m_state == OverlayState::MINING_NOTIFICATION) {
         if (--m_notificationTimer <= 0) {
             m_state = OverlayState::READY;
+            m_statusMessage = "";
         }
     }
+}
 
-    // Touch screen handling (handheld mode)
-    if (touching && touchX >= 0 && touchY >= 0) {
-        selectTokenAt(touchX, touchY);
+#ifdef __SWITCH__
+bool OverlayGui::handleInput(u64 keysDown, u64 keysHeld, const HidTouchState &touchPos, HidAnalogStickState leftJoyStick, HidAnalogStickState rightJoyStick) {
+    // Touch screen handling
+    if (touchPos.x > 0 && touchPos.y > 0) {
+        selectTokenAt(touchPos.x, touchPos.y);
     }
 
-    // D-Pad and Left Stick cursor movement
+    // D-Pad and Analog Stick movement
     int dx = 0;
     int dy = 0;
     int speed = m_config.cursor_speed;
 
-#ifdef __SWITCH__
-    if (keysHeld & HidNpadButton_StickLLeft || keysHeld & HidNpadButton_DLeft) dx -= speed;
-    if (keysHeld & HidNpadButton_StickLRight || keysHeld & HidNpadButton_DRight) dx += speed;
-    if (keysHeld & HidNpadButton_StickLUp || keysHeld & HidNpadButton_DUp) dy -= speed;
-    if (keysHeld & HidNpadButton_StickLDown || keysHeld & HidNpadButton_DDown) dy += speed;
+    if (keysHeld & HidNpadButton_Left)  dx -= speed;
+    if (keysHeld & HidNpadButton_Right) dx += speed;
+    if (keysHeld & HidNpadButton_Up)    dy -= speed;
+    if (keysHeld & HidNpadButton_Down)  dy += speed;
+
+    if (std::abs(leftJoyStick.x) > 8000) {
+        dx += (leftJoyStick.x > 0 ? speed : -speed);
+    }
+    if (std::abs(leftJoyStick.y) > 8000) {
+        dy += (leftJoyStick.y > 0 ? -speed : speed);
+    }
 
     if (dx != 0 || dy != 0) {
         updateCursorPosition(dx, dy);
@@ -174,102 +181,100 @@ void OverlayGui::update(uint64_t keysDown, uint64_t keysHeld, int touchX, int to
                 m_cursor.current_def_page = (m_cursor.current_def_page + 1) % box.tokens[0].definitions.size();
             }
         }
+        return true;
     }
 
     // Button Y: export to Anki
     if (keysDown & HidNpadButton_Y) {
         triggerAnkiMining();
+        return true;
     }
 
     // Button X: re-scan screen
     if (keysDown & HidNpadButton_X) {
         triggerScan();
+        return true;
     }
-#else
-    (void)keysDown; (void)keysHeld;
-#endif
+
+    // Button B: exit overlay
+    if (keysDown & HidNpadButton_B) {
+        tsl::goBack();
+        return true;
+    }
+
+    return false;
 }
 
-void OverlayGui::render() {
-#ifdef __SWITCH__
-    auto renderer = tsl::gfx::Renderer::get();
+void OverlayGui::render(tsl::gfx::Renderer* renderer, s32 frameX, s32 frameY, s32 frameW, s32 frameH) {
+    if (!renderer) return;
 
-    // 1. Draw detected bounding boxes
-    for (size_t i = 0; i < m_ocrData.boxes.size(); ++i) {
-        const auto& b = m_ocrData.boxes[i];
-        bool isHovered = ((int)i == m_cursor.active_box_idx);
+    // RGBA4444 color definitions (each channel 0x0 - 0xF)
+    constexpr tsl::Color colTextWhite = { 0xF, 0xF, 0xF, 0xF };
+    constexpr tsl::Color colTextYellow = { 0xF, 0xD, 0x2, 0xF };
+    constexpr tsl::Color colTextCyan = { 0x0, 0xD, 0xF, 0xF };
+    constexpr tsl::Color colTextGray = { 0xA, 0xA, 0xA, 0xF };
+    constexpr tsl::Color colCardBg = { 0x1, 0x1, 0x2, 0xF };
+    constexpr tsl::Color colCardBorder = { 0x0, 0x9, 0xF, 0xF };
 
-        // Semi-transparent box background
-        tsl::Color boxBg = isHovered ? tsl::Color{0, 150, 255, 90} : tsl::Color{20, 20, 40, 60};
-        tsl::Color boxBorder = isHovered ? tsl::Color{0, 220, 255, 220} : tsl::Color{180, 180, 200, 140};
-
-        renderer->drawRect(b.rect.x, b.rect.y, b.rect.w, b.rect.h, boxBg);
-        // Border outline
-        renderer->drawRect(b.rect.x, b.rect.y, b.rect.w, 2, boxBorder);
-        renderer->drawRect(b.rect.x, b.rect.y + b.rect.h - 2, b.rect.w, 2, boxBorder);
-        renderer->drawRect(b.rect.x, b.rect.y, 2, b.rect.h, boxBorder);
-        renderer->drawRect(b.rect.x + b.rect.w - 2, b.rect.y, 2, b.rect.h, boxBorder);
+    // 1. Status header / Notification
+    if (!m_statusMessage.empty()) {
+        renderer->drawRect(frameX, frameY, frameW, 36, tsl::gfx::Renderer::a(colCardBg));
+        renderer->drawString(m_statusMessage.c_str(), false, frameX + 10, frameY + 22, 16.0f, tsl::gfx::Renderer::a(colTextYellow));
     }
 
-    // 2. Draw definition card if a token is hovered
+    // 2. Display detected content / Active token definition
     if (m_state == OverlayState::READY && m_cursor.active_box_idx >= 0 && m_cursor.active_box_idx < (int)m_ocrData.boxes.size()) {
         const auto& box = m_ocrData.boxes[m_cursor.active_box_idx];
+
+        s32 cardY = frameY + 45;
+
         if (!box.tokens.empty() && m_cursor.active_token_idx >= 0 && m_cursor.active_token_idx < (int)box.tokens.size()) {
             const auto& token = box.tokens[m_cursor.active_token_idx];
 
-            // Card placement: top if cursor is low, bottom if cursor is high
-            int cardY = (m_cursor.y > 360) ? 30 : 500;
-            int cardX = 140;
-            int cardW = 1000;
-            int cardH = 180;
+            // Card background & border
+            renderer->drawRect(frameX, cardY, frameW, 280, tsl::gfx::Renderer::a(colCardBg));
+            renderer->drawRect(frameX, cardY, frameW, 2, tsl::gfx::Renderer::a(colCardBorder));
 
-            // Glassmorphic dark card
-            renderer->drawRect(cardX, cardY, cardW, cardH, tsl::Color{12, 14, 24, 230});
-            renderer->drawRect(cardX, cardY, cardW, 2, tsl::Color{0, 180, 255, 200});
-
-            // Card Header: Word & Furigana
+            // Word & Reading
             std::string header = token.word;
             if (!token.reading.empty() && token.reading != token.word) {
                 header += " [" + token.reading + "]";
             }
             if (!token.pitch.empty()) {
-                header += "  Pitch: " + token.pitch[0];
+                header += "  P:" + token.pitch[0];
             }
-            renderer->drawString(header.c_str(), false, cardX + 24, cardY + 20, 24, tsl::Color{255, 255, 255, 255});
+            renderer->drawString(header.c_str(), false, frameX + 10, cardY + 30, 22.0f, tsl::gfx::Renderer::a(colTextWhite));
 
             // Definitions
-            int defY = cardY + 60;
+            s32 defY = cardY + 65;
             if (!token.definitions.empty()) {
                 size_t page = m_cursor.current_def_page % token.definitions.size();
-                std::string defText = std::to_string(page + 1) + ". " + token.definitions[page];
-                renderer->drawString(defText.c_str(), false, cardX + 24, defY, 18, tsl::Color{220, 230, 245, 255});
+                std::string defLine = std::to_string(page + 1) + ". " + token.definitions[page];
+                renderer->drawString(defLine.c_str(), false, frameX + 10, defY, 16.0f, tsl::gfx::Renderer::a(colTextCyan));
             }
 
-            // Context sentence preview
-            std::string ctx = "Phrase: " + box.text;
-            renderer->drawString(ctx.c_str(), false, cardX + 24, cardY + 115, 15, tsl::Color{160, 175, 190, 200});
+            // Context sentence
+            std::string ctx = "Texte: " + box.text;
+            renderer->drawString(ctx.c_str(), false, frameX + 10, cardY + 200, 14.0f, tsl::gfx::Renderer::a(colTextGray));
 
-            // Card footer hint
-            std::string navHint = "[A/R] Mot/Def suivant (" + std::to_string(m_cursor.active_token_idx + 1) + "/" + std::to_string(box.tokens.size()) + ")  |  [Y] Exporter Anki";
-            renderer->drawString(navHint.c_str(), false, cardX + 24, cardY + 148, 14, tsl::Color{0, 200, 255, 220});
+            // Token navigation counter
+            std::string count = "Mot " + std::to_string(m_cursor.active_token_idx + 1) + "/" + std::to_string(box.tokens.size()) + " (A: Suivant)";
+            renderer->drawString(count.c_str(), false, frameX + 10, cardY + 250, 14.0f, tsl::gfx::Renderer::a(colTextYellow));
+        } else {
+            // Box raw text
+            renderer->drawRect(frameX, cardY, frameW, 100, tsl::gfx::Renderer::a(colCardBg));
+            std::string raw = "Texte: " + box.text;
+            renderer->drawString(raw.c_str(), false, frameX + 10, cardY + 40, 16.0f, tsl::gfx::Renderer::a(colTextWhite));
         }
+    } else if (m_state == OverlayState::READY && m_ocrData.boxes.empty()) {
+        renderer->drawString("Aucun texte detecte.", false, frameX + 10, frameY + 80, 18.0f, tsl::gfx::Renderer::a(colTextGray));
     }
 
-    // 3. Draw Virtual Cursor (Circle / Crosshair)
-    tsl::Color curCol = (m_cursor.active_box_idx >= 0) ? tsl::Color{0, 255, 220, 240} : tsl::Color{255, 255, 255, 200};
-    renderer->drawRect(m_cursor.x - 6, m_cursor.y - 1, 13, 3, curCol);
-    renderer->drawRect(m_cursor.x - 1, m_cursor.y - 6, 3, 13, curCol);
-
-    // 4. Status notifications & bottom controls bar
-    if (!m_statusMessage.empty()) {
-        renderer->drawRect(340, 20, 600, 44, tsl::Color{20, 25, 40, 240});
-        renderer->drawString(m_statusMessage.c_str(), false, 360, 32, 17, tsl::Color{255, 220, 100, 255});
-    }
-
-    // Persistent footer
-    renderer->drawRect(0, 690, 1280, 30, tsl::Color{10, 12, 18, 220});
-    renderer->drawString("[Stick L] Curseur  |  [A/R] Def  |  [Y] Anki  |  [X] Re-scan  |  [B] Quitter", false, 340, 696, 14, tsl::Color{200, 200, 200, 200});
-#endif
+    // 3. Bottom controls footer
+    s32 footerY = frameY + frameH - 40;
+    renderer->drawRect(frameX, footerY, frameW, 40, tsl::gfx::Renderer::a(colCardBg));
+    renderer->drawString("\uE0E0 Def  \uE0E3 Anki  \uE0E2 Scan  \uE0E1 Retour", false, frameX + 10, footerY + 26, 15.0f, tsl::gfx::Renderer::a(colTextWhite));
 }
+#endif
 
 } // namespace switch_ocr

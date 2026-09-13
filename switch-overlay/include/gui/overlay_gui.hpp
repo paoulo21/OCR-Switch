@@ -5,6 +5,7 @@
 #include <vector>
 
 #ifdef __SWITCH__
+#include <switch.h>
 #include <tesla.hpp>
 #endif
 
@@ -24,8 +25,12 @@ public:
     ~OverlayGui();
 
     void init();
-    void update(uint64_t keysDown, uint64_t keysHeld, int touchX, int touchY, bool touching);
-    void render();
+    void update();
+
+#ifdef __SWITCH__
+    bool handleInput(u64 keysDown, u64 keysHeld, const HidTouchState &touchPos, HidAnalogStickState leftJoyStick, HidAnalogStickState rightJoyStick);
+    void render(tsl::gfx::Renderer* renderer, s32 frameX, s32 frameY, s32 frameW, s32 frameH);
+#endif
 
     void triggerScan();
     void triggerAnkiMining();
