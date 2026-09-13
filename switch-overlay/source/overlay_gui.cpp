@@ -52,7 +52,7 @@ void OverlayGui::triggerScan() {
     m_ocrData = HttpClient::performOcr(m_config.server_ip, m_config.server_port, jpeg.data(), jpeg.size(), 6);
     if (!m_ocrData.success) {
         m_state = OverlayState::ERROR;
-        m_statusMessage = m_ocrData.error_message.empty() ? ("Serveur injoignable (" + m_config.server_ip + ")") : m_ocrData.error_message;
+        m_statusMessage = m_ocrData.error_message.empty() ? ("Serveur injoignable:\n" + m_config.server_ip + ":" + std::to_string(m_config.server_port)) : m_ocrData.error_message;
         return;
     }
 
@@ -219,15 +219,24 @@ void OverlayGui::render(tsl::gfx::Renderer* renderer, s32 frameX, s32 frameY, s3
 
     // 1. Status header / Notification
     if (!m_statusMessage.empty()) {
-        renderer->drawRect(frameX, frameY, frameW, 36, tsl::gfx::Renderer::a(colCardBg));
-        renderer->drawString(m_statusMessage.c_str(), false, frameX + 10, frameY + 22, 16.0f, tsl::gfx::Renderer::a(colTextYellow));
+        auto nl = m_statusMessage.find('\n');
+        if (nl != std::string::npos) {
+            std::string line1 = m_statusMessage.substr(0, nl);
+            std::string line2 = m_statusMessage.substr(nl + 1);
+            renderer->drawRect(frameX, frameY, frameW, 54, tsl::gfx::Renderer::a(colCardBg));
+            renderer->drawString(line1.c_str(), false, frameX + 10, frameY + 20, 15.0f, tsl::gfx::Renderer::a(colTextYellow));
+            renderer->drawString(line2.c_str(), false, frameX + 10, frameY + 40, 13.0f, tsl::gfx::Renderer::a(colTextGray));
+        } else {
+            renderer->drawRect(frameX, frameY, frameW, 36, tsl::gfx::Renderer::a(colCardBg));
+            renderer->drawString(m_statusMessage.c_str(), false, frameX + 10, frameY + 22, 15.0f, tsl::gfx::Renderer::a(colTextYellow));
+        }
     }
 
     // 2. Display detected content / Active token definition
     if (m_state == OverlayState::READY && m_cursor.active_box_idx >= 0 && m_cursor.active_box_idx < (int)m_ocrData.boxes.size()) {
         const auto& box = m_ocrData.boxes[m_cursor.active_box_idx];
 
-        s32 cardY = frameY + 45;
+        s32 cardY = (m_statusMessage.find('\n') != std::string::npos) ? (frameY + 62) : (frameY + 45);
 
         if (!box.tokens.empty() && m_cursor.active_token_idx >= 0 && m_cursor.active_token_idx < (int)box.tokens.size()) {
             const auto& token = box.tokens[m_cursor.active_token_idx];

@@ -48,14 +48,14 @@ static HttpResponse postRequest(
     serverAddr.sin_port = htons(port);
     if (inet_pton(AF_INET, ip.c_str(), &serverAddr.sin_addr) <= 0) {
         close(sock);
-        resp.error = "IP invalide: " + ip;
+        resp.error = "Format IP invalide:\n" + ip;
         return resp;
     }
 
     if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
         int err = errno;
         close(sock);
-        resp.error = "Connect echec (" + ip + ":" + std::to_string(port) + "): " + strerror(err);
+        resp.error = "Echec connexion:\n" + ip + ":" + std::to_string(port) + " (" + strerror(err) + ")";
         return resp;
     }
 
@@ -82,7 +82,7 @@ static HttpResponse postRequest(
         if (sent <= 0) {
             int err = errno;
             close(sock);
-            resp.error = "Envoi body echec (" + std::to_string(totalSent) + "/" + std::to_string(bodySize) + "): " + strerror(err);
+            resp.error = "Envoi body echec:\n" + std::to_string(totalSent) + "/" + std::to_string(bodySize) + " (" + strerror(err) + ")";
             return resp;
         }
         totalSent += sent;
@@ -100,7 +100,7 @@ static HttpResponse postRequest(
     close(sock);
 
     if (response.empty()) {
-        resp.error = "Timeout OCR (" + ip + ":" + std::to_string(port) + ")";
+        resp.error = "Timeout reponse OCR:\n" + ip + ":" + std::to_string(port);
         return resp;
     }
 
@@ -119,7 +119,7 @@ static HttpResponse postRequest(
     }
 
     if (resp.status_code != 200 && resp.status_code != 0) {
-        resp.error = "Erreur HTTP " + std::to_string(resp.status_code) + " (" + ip + ")";
+        resp.error = "Erreur HTTP " + std::to_string(resp.status_code) + ":\n" + ip + ":" + std::to_string(port);
         return resp;
     }
 

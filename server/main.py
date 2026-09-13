@@ -20,10 +20,27 @@ logger = logging.getLogger("switch-ocr.server")
 discovery_service = DiscoveryServer()
 anki_exporter = AnkiExporter()
 
+def get_local_lan_ip() -> str:
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Initializing Switch OCR Server...")
+    local_ip = get_local_lan_ip()
+    logger.info("=" * 60)
+    logger.info("  SWITCH OCR SERVER ACTIF")
+    logger.info(f"  IP DE VOTRE APPAREIL      : {local_ip}")
+    logger.info(f"  Port HTTP                 : {SERVER_PORT}")
+    logger.info(f"  Port Decouverte UDP       : {discovery_service.port}")
+    logger.info("=" * 60)
     get_ocr_engine()
     get_dict_engine()
     discovery_service.start()

@@ -24,44 +24,41 @@ bool DiscoveryClient::discoverServer(int discoveryPort, std::string& outIp, int&
     broadcastAddr.sin_port = htons(discoveryPort);
     broadcastAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 
+    // Set receive timeout directly on socket instead of relying on poll()
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 350000; // 350 ms per attempt
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+
     const char* pingMsg = "DISCOVER_SWITCH_OCR";
     
-    // Poll loop with retries every 600ms up to timeoutMs
     int elapsed = 0;
-    constexpr int INTERVAL_MS = 600;
+    constexpr int STEP_MS = 350;
     
     while (elapsed < timeoutMs) {
         sendto(sock, pingMsg, std::strlen(pingMsg), 0, (struct sockaddr*)&broadcastAddr, sizeof(broadcastAddr));
         
-        struct pollfd pfd;
-        pfd.fd = sock;
-        pfd.events = POLLIN;
-        
-        int waitTime = std::min(INTERVAL_MS, timeoutMs - elapsed);
-        int ret = poll(&pfd, 1, waitTime);
-        if (ret > 0 && (pfd.revents & POLLIN)) {
-            char buffer[256];
-            struct sockaddr_in senderAddr;
-            socklen_t senderLen = sizeof(senderAddr);
+        char buffer[256];
+        struct sockaddr_in senderAddr;
+        socklen_t senderLen = sizeof(senderAddr);
 
-            ssize_t received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&senderAddr, &senderLen);
-            if (received > 0) {
-                buffer[received] = '\0';
-                std::string msg(buffer);
-                // Format: "SWITCH_OCR_SERVER:8766"
-                const std::string prefix = "SWITCH_OCR_SERVER:";
-                auto pos = msg.find(prefix);
-                if (pos != std::string::npos) {
-                    outIp = inet_ntoa(senderAddr.sin_addr);
-                    std::string portStr = msg.substr(pos + prefix.length());
-                    outPort = std::atoi(portStr.c_str());
-                    if (outPort <= 0) outPort = 8766;
-                    close(sock);
-                    return true;
-                }
+        ssize_t received = recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&senderAddr, &senderLen);
+        if (received > 0) {
+            buffer[received] = '\0';
+            std::string msg(buffer);
+            // Format: "SWITCH_OCR_SERVER:8766"
+            const std::string prefix = "SWITCH_OCR_SERVER:";
+            auto pos = msg.find(prefix);
+            if (pos != std::string::npos) {
+                outIp = inet_ntoa(senderAddr.sin_addr);
+                std::string portStr = msg.substr(pos + prefix.length());
+                outPort = std::atoi(portStr.c_str());
+                if (outPort <= 0) outPort = 8766;
+                close(sock);
+                return true;
             }
         }
-        elapsed += waitTime;
+        elapsed += STEP_MS;
     }
 
     close(sock);

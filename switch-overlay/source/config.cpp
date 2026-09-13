@@ -3,6 +3,7 @@
 #include <sstream>
 #include <algorithm>
 #include <cstdlib>
+#include <arpa/inet.h>
 
 namespace switch_ocr {
 
@@ -33,8 +34,17 @@ Config ConfigManager::load(const std::string& path) {
         std::string key = trim(line.substr(0, sep));
         std::string val = trim(line.substr(sep + 1));
 
+        // Strip inline comments (; or #)
+        auto commentPos = val.find_first_of(";#");
+        if (commentPos != std::string::npos) {
+            val = trim(val.substr(0, commentPos));
+        }
+
         if (key == "server_ip") {
-            cfg.server_ip = val;
+            struct in_addr addr;
+            if (inet_pton(AF_INET, val.c_str(), &addr) > 0) {
+                cfg.server_ip = val;
+            }
         } else if (key == "server_port") {
             cfg.server_port = std::atoi(val.c_str());
         } else if (key == "discovery_port") {
