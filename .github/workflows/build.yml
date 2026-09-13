@@ -21,13 +21,19 @@ jobs:
       - name: Compile switch-ocr.ovl
         run: |
           cd switch-overlay
-          make -j$(nproc)
+          make -j$(nproc) 2>&1 | tee /tmp/build.log || {
+            echo "## ❌ Erreur de compilation" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
           echo "=== Fichiers .ovl générés ==="
           find . -name "*.ovl"
           find . -name "*.ovl" -exec cp -v {} ../ \;
           cd ..
           chmod -R 777 .
-          ls -lh *.ovl
+          ls -lh *.ovl || true
 
       - name: Upload switch-ocr.ovl artifact
         uses: actions/upload-artifact@v4

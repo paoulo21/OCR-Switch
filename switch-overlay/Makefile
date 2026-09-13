@@ -9,7 +9,8 @@ endif
 TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
 
-APP_TITLE   := Switch OCR & Hoshidicts
+APP_TITLE   := Switch-OCR
+APP_AUTHOR  := paoulo21
 APP_VERSION := 1.0.0
 
 TARGET      := switch-ocr
