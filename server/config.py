@@ -31,6 +31,7 @@ ENABLE_DISCOVERY = os.getenv("ENABLE_DISCOVERY", "true").lower() in ("1", "true"
 # OCR Engine Configuration ("auto", "rapidocr", "cloud", "mock")
 OCR_ENGINE = os.getenv("OCR_ENGINE", "auto")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 # Dictionary Engine Configuration
 HOSHIDICTS_BIN_PATH = os.getenv("HOSHIDICTS_BIN_PATH", "hoshidicts")

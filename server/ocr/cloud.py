@@ -6,14 +6,15 @@ import requests
 from PIL import Image
 import io
 
-from server.config import GEMINI_API_KEY
+from server.config import GEMINI_API_KEY, GEMINI_MODEL
 from server.ocr.base import BaseOCREngine, DetectedBlock
 
 logger = logging.getLogger("switch-ocr.ocr.cloud")
 
 class CloudOCREngine(BaseOCREngine):
-    def __init__(self, api_key: str = GEMINI_API_KEY):
+    def __init__(self, api_key: str = GEMINI_API_KEY, model: str = GEMINI_MODEL):
         self.api_key = api_key
+        self.model = model
 
     def is_available(self) -> bool:
         return bool(self.api_key and len(self.api_key.strip()) > 5)
@@ -30,7 +31,7 @@ class CloudOCREngine(BaseOCREngine):
             img_w, img_h = 1280, 720
 
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
 
         prompt = (
             "Detect all Japanese text lines/bubbles in this image. "
@@ -59,11 +60,26 @@ class CloudOCREngine(BaseOCREngine):
         }
 
         try:
-            res = requests.post(url, json=payload, timeout=10)
+            res = requests.post(url, json=payload, timeout=15)
+            if not res.ok:
+                logger.error(f"Gemini API error ({res.status_code}): {res.text}")
             res.raise_for_status()
             data = res.json()
-            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            items = json.loads(raw_text)
+            candidates = data.get("candidates", [])
+            if not candidates:
+                logger.warning(f"No candidates returned by Gemini: {data}")
+                return []
+
+            raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "[]").strip()
+            if raw_text.startswith("```"):
+                lines = raw_text.splitlines()
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                raw_text = "\n".join(lines).strip()
+
+            items = json.loads(raw_text) if raw_text else []
 
             blocks: List[DetectedBlock] = []
             for item in items:
