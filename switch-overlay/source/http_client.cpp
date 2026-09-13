@@ -7,12 +7,20 @@
 #include <unistd.h>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
 #include <sstream>
 #include <vector>
 
 namespace switch_ocr {
 
-static std::string postRequest(
+struct HttpResponse {
+    bool ok = false;
+    int status_code = 0;
+    std::string body;
+    std::string error;
+};
+
+static HttpResponse postRequest(
     const std::string& ip,
     int port,
     const std::string& path,
@@ -21,8 +29,12 @@ static std::string postRequest(
     size_t bodySize,
     int timeoutSec
 ) {
+    HttpResponse resp;
     int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) return "";
+    if (sock < 0) {
+        resp.error = "Erreur socket (" + std::string(strerror(errno)) + ")";
+        return resp;
+    }
 
     struct timeval tv;
     tv.tv_sec = timeoutSec;
@@ -34,11 +46,17 @@ static std::string postRequest(
     std::memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
-    inet_pton(AF_INET, ip.c_str(), &serverAddr.sin_addr);
+    if (inet_pton(AF_INET, ip.c_str(), &serverAddr.sin_addr) <= 0) {
+        close(sock);
+        resp.error = "IP invalide: " + ip;
+        return resp;
+    }
 
     if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+        int err = errno;
         close(sock);
-        return "";
+        resp.error = "Connect echec (" + ip + ":" + std::to_string(port) + "): " + strerror(err);
+        return resp;
     }
 
     std::ostringstream header;
@@ -49,13 +67,24 @@ static std::string postRequest(
            << "Connection: close\r\n\r\n";
 
     std::string headerStr = header.str();
-    send(sock, headerStr.c_str(), headerStr.length(), 0);
+    ssize_t hSent = send(sock, headerStr.c_str(), headerStr.length(), 0);
+    if (hSent < (ssize_t)headerStr.length()) {
+        int err = errno;
+        close(sock);
+        resp.error = "Envoi header echec (" + std::string(strerror(err)) + ")";
+        return resp;
+    }
 
     // Send payload
     size_t totalSent = 0;
     while (totalSent < bodySize) {
         ssize_t sent = send(sock, (const char*)bodyData + totalSent, bodySize - totalSent, 0);
-        if (sent <= 0) break;
+        if (sent <= 0) {
+            int err = errno;
+            close(sock);
+            resp.error = "Envoi body echec (" + std::to_string(totalSent) + "/" + std::to_string(bodySize) + "): " + strerror(err);
+            return resp;
+        }
         totalSent += sent;
     }
 
@@ -67,14 +96,43 @@ static std::string postRequest(
         buffer[bytesRead] = '\0';
         response.append(buffer, bytesRead);
     }
+    int err = errno;
     close(sock);
+
+    if (response.empty()) {
+        resp.error = "Timeout OCR (" + ip + ":" + std::to_string(port) + ")";
+        return resp;
+    }
+
+    // Check HTTP status code
+    auto firstLineEnd = response.find("\r\n");
+    if (firstLineEnd != std::string::npos) {
+        std::string statusLine = response.substr(0, firstLineEnd);
+        auto space1 = statusLine.find(' ');
+        if (space1 != std::string::npos) {
+            auto space2 = statusLine.find(' ', space1 + 1);
+            std::string codeStr = (space2 != std::string::npos) 
+                ? statusLine.substr(space1 + 1, space2 - space1 - 1)
+                : statusLine.substr(space1 + 1);
+            resp.status_code = std::atoi(codeStr.c_str());
+        }
+    }
+
+    if (resp.status_code != 200 && resp.status_code != 0) {
+        resp.error = "Erreur HTTP " + std::to_string(resp.status_code) + " (" + ip + ")";
+        return resp;
+    }
 
     // Extract body after \r\n\r\n
     auto bodyPos = response.find("\r\n\r\n");
     if (bodyPos != std::string::npos) {
-        return response.substr(bodyPos + 4);
+        resp.body = response.substr(bodyPos + 4);
+        resp.ok = true;
+        return resp;
     }
-    return "";
+
+    resp.error = "Reponse incomplete (" + ip + ")";
+    return resp;
 }
 
 // Lightweight manual JSON token extractor
@@ -120,16 +178,17 @@ OCRResponse HttpClient::performOcr(
     int timeoutSec
 ) {
     OCRResponse resp;
-    std::string json = postRequest(serverIp, serverPort, "/api/ocr", "image/jpeg", jpegData, jpegSize, timeoutSec);
-    if (json.empty()) {
+    HttpResponse httpResp = postRequest(serverIp, serverPort, "/api/ocr", "image/jpeg", jpegData, jpegSize, timeoutSec);
+    if (!httpResp.ok) {
         resp.success = false;
-        resp.error_message = "Connexion au serveur impossible.";
+        resp.error_message = httpResp.error.empty() ? "Serveur injoignable." : httpResp.error;
         return resp;
     }
 
+    const std::string& json = httpResp.body;
     if (json.find("\"status\":\"ok\"") == std::string::npos && json.find("\"status\": \"ok\"") == std::string::npos) {
         resp.success = false;
-        resp.error_message = "Erreur serveur OCR.";
+        resp.error_message = "Erreur reponse OCR (" + serverIp + ")";
         return resp;
     }
 
@@ -218,7 +277,7 @@ bool HttpClient::exportAnki(
     json << "]}";
 
     std::string payload = json.str();
-    std::string res = postRequest(
+    HttpResponse httpResp = postRequest(
         serverIp,
         serverPort,
         "/api/anki",
@@ -228,7 +287,9 @@ bool HttpClient::exportAnki(
         timeoutSec
     );
 
-    return res.find("\"success\":true") != std::string::npos || res.find("\"success\": true") != std::string::npos;
+    if (!httpResp.ok) return false;
+    return httpResp.body.find("\"success\":true") != std::string::npos || 
+           httpResp.body.find("\"success\": true") != std::string::npos;
 }
 
 } // namespace switch_ocr

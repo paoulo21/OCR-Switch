@@ -45,6 +45,8 @@ class DiscoveryServer:
                 text = data.decode("utf-8", errors="ignore").strip()
                 if "DISCOVER" in text or "SWITCH_OCR" in text:
                     sock.sendto(response, addr)
+                    time.sleep(0.03)
+                    sock.sendto(response, addr)
                     logger.info(f"Answered discovery ping from Switch at {addr[0]}:{addr[1]}")
             except socket.timeout:
                 continue

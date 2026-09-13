@@ -29,7 +29,7 @@ void OverlayGui::init() {
     if (m_config.auto_discovery) {
         std::string foundIp;
         int foundPort = 8766;
-        if (DiscoveryClient::discoverServer(m_config.discovery_port, foundIp, foundPort, 1200)) {
+        if (DiscoveryClient::discoverServer(m_config.discovery_port, foundIp, foundPort, 3000)) {
             m_config.server_ip = foundIp;
             m_config.server_port = foundPort;
         }
@@ -49,10 +49,10 @@ void OverlayGui::triggerScan() {
         return;
     }
 
-    m_ocrData = HttpClient::performOcr(m_config.server_ip, m_config.server_port, jpeg.data(), jpeg.size());
+    m_ocrData = HttpClient::performOcr(m_config.server_ip, m_config.server_port, jpeg.data(), jpeg.size(), 15);
     if (!m_ocrData.success) {
         m_state = OverlayState::ERROR;
-        m_statusMessage = m_ocrData.error_message.empty() ? "Serveur injoignable." : m_ocrData.error_message;
+        m_statusMessage = m_ocrData.error_message.empty() ? ("Serveur injoignable (" + m_config.server_ip + ")") : m_ocrData.error_message;
         return;
     }
 

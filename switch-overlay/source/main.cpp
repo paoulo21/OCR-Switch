@@ -44,9 +44,11 @@ class SwitchOcrOverlay : public tsl::Overlay {
 public:
     virtual void initServices() override {
         switch_ocr::ScreenCapture::initialize();
+        socketInitializeDefault();
     }
 
     virtual void exitServices() override {
+        socketExit();
         switch_ocr::ScreenCapture::exit();
     }
 
