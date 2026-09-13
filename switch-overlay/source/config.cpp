@@ -22,8 +22,8 @@ Config ConfigManager::load(const std::string& path) {
     Config cfg;
     std::ifstream file(path);
     if (!file.is_open()) {
-        mkdir("/config", 0777);
-        mkdir("/config/switch-ocr", 0777);
+        mkdir("sdmc:/config", 0777);
+        mkdir("sdmc:/config/switch-ocr", 0777);
         save(cfg, path);
         return cfg;
     }

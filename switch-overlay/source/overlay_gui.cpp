@@ -17,29 +17,12 @@
 
 namespace switch_ocr {
 
-#ifdef __SWITCH__
-void OverlayGui::scanThreadFunc(void* arg) {
-    auto* self = static_cast<OverlayGui*>(arg);
-    if (self) {
-        self->runScanPipeline();
-    }
-}
-#endif
-
 OverlayGui::OverlayGui() {
     m_cursor.x = 224;
     m_cursor.y = 360;
 }
 
-OverlayGui::~OverlayGui() {
-#ifdef __SWITCH__
-    if (m_scanThreadStarted) {
-        threadWaitForExit(&m_scanThread);
-        threadClose(&m_scanThread);
-        m_scanThreadStarted = false;
-    }
-#endif
-}
+OverlayGui::~OverlayGui() {}
 
 void OverlayGui::init() {
     m_config = ConfigManager::load();
@@ -48,71 +31,43 @@ void OverlayGui::init() {
 }
 
 void OverlayGui::triggerScan() {
-    if (m_isScanning) return;
-
-    m_isScanning = true;
     m_state = OverlayState::SCANNING;
-    m_statusMessage = "Capture & analyse OCR en cours...";
+    m_statusMessage = "Capture & analyse OCR...";
 
-#ifdef __SWITCH__
-    if (m_scanThreadStarted) {
-        threadWaitForExit(&m_scanThread);
-        threadClose(&m_scanThread);
-        m_scanThreadStarted = false;
-    }
-
-    Result rc = threadCreate(&m_scanThread, scanThreadFunc, this, nullptr, 0x10000, 0x2C, -2);
-    if (R_SUCCEEDED(rc)) {
-        m_scanThreadStarted = true;
-        threadStart(&m_scanThread);
-    } else {
-        m_isScanning = false;
-        m_state = OverlayState::ERROR;
-        m_statusMessage = "Erreur creation thread.";
-    }
-#else
-    runScanPipeline();
-#endif
-}
-
-void OverlayGui::runScanPipeline() {
-    // 1. UDP Auto-discovery if enabled
+    // 1. Quick UDP auto-discovery (500 ms) if enabled
     if (m_config.auto_discovery) {
         std::string foundIp;
         int foundPort = 8766;
-        if (DiscoveryClient::discoverServer(m_config.discovery_port, foundIp, foundPort, 1000)) {
+        if (DiscoveryClient::discoverServer(m_config.discovery_port, foundIp, foundPort, 500)) {
             m_config.server_ip = foundIp;
             m_config.server_port = foundPort;
         }
     }
 
-    // 2. Prevent dead-connect timeout if discovery failed and IP is unconfigured default
+    // 2. Prevent connecting to default placeholder IP if discovery failed
     if (m_config.server_ip == "192.168.1.100") {
         m_state = OverlayState::ERROR;
         m_statusMessage = "Serveur non detecte (Wi-Fi):\nDefinissez server_ip dans config.ini";
-        m_isScanning = false;
         return;
     }
 
-    // 3. Capture screen to JPEG
+    // 3. Screen capture (~5ms)
     std::vector<uint8_t> jpeg;
     if (!ScreenCapture::captureJpeg(jpeg)) {
         m_state = OverlayState::ERROR;
         m_statusMessage = "Erreur capture ecran.";
-        m_isScanning = false;
         return;
     }
 
-    // 4. HTTP OCR request
-    OCRResponse resp = HttpClient::performOcr(m_config.server_ip, m_config.server_port, jpeg.data(), jpeg.size(), 6);
+    // 4. HTTP OCR request (3s timeout)
+    OCRResponse resp = HttpClient::performOcr(m_config.server_ip, m_config.server_port, jpeg.data(), jpeg.size(), 3);
     if (!resp.success) {
         m_state = OverlayState::ERROR;
         m_statusMessage = resp.error_message.empty() ? ("Serveur injoignable:\n" + m_config.server_ip + ":" + std::to_string(m_config.server_port)) : resp.error_message;
-        m_isScanning = false;
         return;
     }
 
-    // 5. OCR success: populate results
+    // 5. Success: populate results
     m_ocrData = std::move(resp);
     m_state = OverlayState::READY;
     m_statusMessage = "";
@@ -130,8 +85,6 @@ void OverlayGui::runScanPipeline() {
             m_cursor.active_token_idx = 0;
         }
     }
-
-    m_isScanning = false;
 }
 
 void OverlayGui::triggerAnkiMining() {
@@ -196,14 +149,6 @@ void OverlayGui::selectTokenAt(int x, int y) {
 }
 
 void OverlayGui::update() {
-#ifdef __SWITCH__
-    if (m_scanThreadStarted && !m_isScanning) {
-        threadWaitForExit(&m_scanThread);
-        threadClose(&m_scanThread);
-        m_scanThreadStarted = false;
-    }
-#endif
-
     if (m_state == OverlayState::MINING_NOTIFICATION) {
         if (--m_notificationTimer <= 0) {
             m_state = OverlayState::READY;
@@ -262,9 +207,7 @@ bool OverlayGui::handleInput(u64 keysDown, u64 keysHeld, const HidTouchState &to
 
     // Button X: re-scan screen
     if (keysDown & HidNpadButton_X) {
-        if (!m_isScanning) {
-            triggerScan();
-        }
+        triggerScan();
         return true;
     }
 
@@ -291,21 +234,19 @@ void OverlayGui::render(tsl::gfx::Renderer* renderer, s32 frameX, s32 frameY, s3
     // 1. Status header / Notification
     s32 contentStartY = frameY + 45;
     if (!m_statusMessage.empty()) {
-        std::vector<std::string> lines;
-        std::stringstream ss(m_statusMessage);
-        std::string line;
-        while (std::getline(ss, line)) {
-            if (!line.empty()) lines.push_back(line);
+        auto nl = m_statusMessage.find('\n');
+        if (nl != std::string::npos) {
+            std::string line1 = m_statusMessage.substr(0, nl);
+            std::string line2 = m_statusMessage.substr(nl + 1);
+            renderer->drawRect(frameX, frameY, frameW, 54, tsl::gfx::Renderer::a(colCardBg));
+            renderer->drawString(line1.c_str(), false, frameX + 10, frameY + 20, 15.0f, tsl::gfx::Renderer::a(colTextYellow));
+            renderer->drawString(line2.c_str(), false, frameX + 10, frameY + 40, 13.0f, tsl::gfx::Renderer::a(colTextGray));
+            contentStartY = frameY + 62;
+        } else {
+            renderer->drawRect(frameX, frameY, frameW, 36, tsl::gfx::Renderer::a(colCardBg));
+            renderer->drawString(m_statusMessage.c_str(), false, frameX + 10, frameY + 22, 15.0f, tsl::gfx::Renderer::a(colTextYellow));
+            contentStartY = frameY + 44;
         }
-
-        s32 bannerH = 14 + (s32)lines.size() * 20;
-        renderer->drawRect(frameX, frameY, frameW, bannerH, tsl::gfx::Renderer::a(colCardBg));
-        for (size_t i = 0; i < lines.size(); ++i) {
-            tsl::Color col = (i == 0) ? colTextYellow : colTextGray;
-            float sz = (i == 0) ? 15.0f : 13.0f;
-            renderer->drawString(lines[i].c_str(), false, frameX + 10, frameY + 18 + (s32)i * 20, sz, tsl::gfx::Renderer::a(col));
-        }
-        contentStartY = frameY + bannerH + 8;
     }
 
     // 2. Display detected content / Active token definition

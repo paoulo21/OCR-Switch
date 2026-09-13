@@ -41,11 +41,6 @@ private:
     void updateCursorPosition(int dx, int dy);
     void checkSnapping();
     void selectTokenAt(int x, int y);
-    void runScanPipeline();
-
-#ifdef __SWITCH__
-    static void scanThreadFunc(void* arg);
-#endif
 
 private:
     Config m_config;
@@ -54,12 +49,6 @@ private:
     CursorState m_cursor;
     std::string m_statusMessage;
     int m_notificationTimer = 0;
-
-    bool m_isScanning = false;
-#ifdef __SWITCH__
-    Thread m_scanThread;
-    bool m_scanThreadStarted = false;
-#endif
 };
 
 } // namespace switch_ocr
