@@ -44,9 +44,25 @@ class SwitchOcrOverlay : public tsl::Overlay {
 public:
     virtual void initServices() override {
         switch_ocr::ScreenCapture::initialize();
+
+        // Initialize BSD sockets with minimal buffer footprint (72 KB instead of 2.25 MB default)
+        // to prevent heap exhaustion in Tesla nx-ovlloader
+        SocketInitConfig sockConfig = {
+            .tcp_tx_buf_size = 0x4000,
+            .tcp_rx_buf_size = 0x4000,
+            .tcp_tx_buf_max_size = 0x8000,
+            .tcp_rx_buf_max_size = 0x8000,
+            .udp_tx_buf_size = 0x1000,
+            .udp_rx_buf_size = 0x1000,
+            .sb_efficiency = 1,
+            .num_bsd_sessions = 1,
+            .bsd_service_type = BsdServiceType_Auto,
+        };
+        socketInitialize(&sockConfig);
     }
 
     virtual void exitServices() override {
+        socketExit();
         switch_ocr::ScreenCapture::exit();
     }
 
