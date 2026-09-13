@@ -31,6 +31,7 @@ void OverlayGui::init() {
 }
 
 void OverlayGui::triggerScan() {
+    if (m_state == OverlayState::SCANNING) return;
     m_state = OverlayState::SCANNING;
     m_statusMessage = "Capture & analyse OCR...";
 
@@ -88,7 +89,7 @@ void OverlayGui::triggerScan() {
 }
 
 void OverlayGui::triggerAnkiMining() {
-    if (m_isScanning) return;
+    if (m_state == OverlayState::SCANNING) return;
     if (m_cursor.active_box_idx < 0 || m_cursor.active_box_idx >= (int)m_ocrData.boxes.size()) {
         return;
     }
