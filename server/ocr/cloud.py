@@ -30,7 +30,7 @@ class CloudOCREngine(BaseOCREngine):
             img_w, img_h = 1280, 720
 
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.api_key}"
 
         prompt = (
             "Detect all Japanese text lines/bubbles in this image. "
