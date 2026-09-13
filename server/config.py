@@ -12,6 +12,16 @@ DATA_DIR.mkdir(exist_ok=True)
 DICTIONARIES_DIR.mkdir(exist_ok=True)
 SCREENSHOTS_DIR.mkdir(exist_ok=True)
 
+# Load optional .env file if present
+env_file = BASE_DIR / ".env"
+if env_file.exists():
+    with open(env_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip("\"'"))
+
 # Server Network Configuration
 SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8766"))

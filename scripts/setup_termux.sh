@@ -18,7 +18,9 @@ pip install pillow || true
 
 # Tentative d'installation de RapidOCR si architecture compatible
 echo "=== [3/4] Installation optionnelle de RapidOCR (ONNX) ==="
-pip install onnxruntime rapidocr-onnxruntime 2>/dev/null || echo "Note: RapidOCR sera utilisé en mode cloud ou fallback si onnxruntime n'est pas disponible pour cette version Android."
+pkg install -y tur-repo 2>/dev/null || true
+pkg install -y python-onnxruntime 2>/dev/null || true
+pip install rapidocr-onnxruntime 2>/dev/null || echo "Note: RapidOCR sera utilisé en mode cloud ou fallback si onnxruntime n'est pas disponible pour cette version Android."
 
 echo "=== [4/4] Création des dossiers de données ==="
 mkdir -p data/dictionaries
