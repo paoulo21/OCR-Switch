@@ -22,18 +22,24 @@ jobs:
         run: |
           cd switch-overlay
           make clean || true
-          make V=1
+          make -j$(nproc) 2>&1 | tee build.log
           echo "=== Fichiers après compilation ==="
           ls -la
           find . -name "*.ovl" -exec cp -v {} .. \; || true
           cd ..
-          ls -la *.ovl || true
+          ls -la *.ovl
 
       - name: Upload switch-ocr.ovl artifact
         uses: actions/upload-artifact@v4
         with:
           name: switch-ocr.ovl
-          path: |
-            switch-ocr.ovl
-            switch-overlay/switch-ocr.ovl
+          path: switch-ocr.ovl
           if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: switch-overlay/build.log
+          if-no-files-found: ignore

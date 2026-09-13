@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 #ifdef __SWITCH__
 #include <switch.h>

@@ -20,7 +20,6 @@ DATA        := data
 INCLUDES    := include libs/libtesla/include
 
 NO_ICON     := 1
-NO_NACP     := 1
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -100,12 +99,11 @@ DEPENDS := $(OFILES:.o=.d)
 
 all: $(OUTPUT).ovl
 
-$(OUTPUT).ovl: $(OUTPUT).elf
-	elf2nro $< $@
+$(OUTPUT).ovl: $(OUTPUT).elf $(OUTPUT).nacp
+	@elf2nro $< $@ $(NROFLAGS)
 	@echo "built ... $(notdir $(OUTPUT).ovl)"
 
 $(OUTPUT).elf: $(OFILES)
-	$(LD) $(LDFLAGS) $(OFILES) $(LIBPATHS) $(LIBS) -o $@
 
 $(OFILES_SRC): $(HFILES_BIN)
 
