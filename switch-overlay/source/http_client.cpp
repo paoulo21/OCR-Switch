@@ -107,7 +107,6 @@ static HttpResponse postRequest(
         buffer[bytesRead] = '\0';
         response.append(buffer, bytesRead);
     }
-    int err = errno;
     close(sock);
 
     if (response.empty()) {
