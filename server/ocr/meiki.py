@@ -14,8 +14,14 @@ class MeikiOCREngine(BaseOCREngine):
         try:
             import warnings
             warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
+            import onnxruntime as ort
             from meikiocr import MeikiOCR
-            self.engine = MeikiOCR()
+
+            available = ort.get_available_providers()
+            provider = "CUDAExecutionProvider" if "CUDAExecutionProvider" in available else "CPUExecutionProvider"
+            logger.info(f"Initializing Meiki OCR with provider: {provider}")
+            self.engine = MeikiOCR(provider=provider)
+
             logger.info("Meiki OCR engine successfully initialized.")
         except Exception as e:
             logger.warning(f"Failed to load Meiki OCR: {e}")

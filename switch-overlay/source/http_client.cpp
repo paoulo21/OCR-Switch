@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
@@ -41,6 +42,15 @@ static HttpResponse postRequest(
     tv.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+
+    // Disable Nagle's algorithm to eliminate 40-200ms latency buffering over Wi-Fi
+    int nodelay = 1;
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (const char*)&nodelay, sizeof(nodelay));
+
+    // Expand socket buffers for fast frame transfer
+    int bufSize = 65536;
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (const char*)&bufSize, sizeof(bufSize));
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (const char*)&bufSize, sizeof(bufSize));
 
     struct sockaddr_in serverAddr;
     std::memset(&serverAddr, 0, sizeof(serverAddr));
@@ -90,7 +100,8 @@ static HttpResponse postRequest(
 
     // Read response
     std::string response;
-    char buffer[4096];
+    response.reserve(16384);
+    char buffer[8192];
     ssize_t bytesRead = 0;
     while ((bytesRead = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
         buffer[bytesRead] = '\0';

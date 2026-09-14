@@ -81,11 +81,8 @@ class TestServerComponents(unittest.TestCase):
         self.assertIn("dict_engine", data)
 
     def test_api_ocr_endpoint(self):
-        # Create dummy image
-        img = Image.new("RGB", (1280, 720), color=(20, 20, 20))
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG")
-        raw_bytes = buf.getvalue()
+        from tests.profile_scan import create_sample_game_screenshot
+        raw_bytes = create_sample_game_screenshot()
 
         response = self.client.post(
             "/api/ocr",

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import logging
 from contextlib import asynccontextmanager
@@ -119,11 +120,14 @@ async def process_ocr(request: Request, file: Optional[UploadFile] = File(None))
     if not image_bytes or len(image_bytes) < 32:
         raise HTTPException(status_code=400, detail="Empty or invalid image data received.")
 
-    # Save incoming screenshot for inspection and debugging
-    try:
-        (SCREENSHOTS_DIR / "last_capture.jpg").write_bytes(image_bytes)
-    except Exception as e:
-        logger.debug(f"Could not save last_capture.jpg: {e}")
+    # Save incoming screenshot asynchronously in background so disk I/O does not block OCR
+    def _save_screenshot(data: bytes):
+        try:
+            (SCREENSHOTS_DIR / "last_capture.jpg").write_bytes(data)
+        except Exception as e:
+            logger.debug(f"Could not save last_capture.jpg: {e}")
+
+    asyncio.create_task(asyncio.to_thread(_save_screenshot, image_bytes))
 
     ocr_engine = get_ocr_engine()
     dict_engine = get_dict_engine()
