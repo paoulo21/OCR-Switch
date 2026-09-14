@@ -28,10 +28,11 @@ SERVER_PORT = int(os.getenv("SERVER_PORT", "8766"))
 DISCOVERY_PORT = int(os.getenv("DISCOVERY_PORT", "8764"))
 ENABLE_DISCOVERY = os.getenv("ENABLE_DISCOVERY", "true").lower() in ("1", "true", "yes")
 
-# OCR Engine Configuration ("auto", "rapidocr", "cloud", "mock")
+# OCR Engine Configuration ("auto", "meikiocr", "rapidocr", "cloud", "mock")
 OCR_ENGINE = os.getenv("OCR_ENGINE", "auto")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+ONLY_JAPANESE = os.getenv("ONLY_JAPANESE", "true").lower() in ("1", "true", "yes")
 
 # Dictionary Engine Configuration
 HOSHIDICTS_BIN_PATH = os.getenv("HOSHIDICTS_BIN_PATH", "hoshidicts")

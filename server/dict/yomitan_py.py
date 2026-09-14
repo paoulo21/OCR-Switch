@@ -82,6 +82,62 @@ class YomitanPyEngine(BaseDictEngine):
 
         logger.info(f"Yomitan engine ready. {len(self.loaded_dictionaries)} dictionary(ies) active, {len(self.entries)} unique terms.")
 
+    @staticmethod
+    def _parse_glossary(raw_glossary) -> List[str]:
+        """Extract definition strings from Yomitan glossary items, supporting structured content."""
+        definitions = []
+
+        def extract_text(node) -> str:
+            if isinstance(node, str):
+                return node.strip()
+            if isinstance(node, (int, float)):
+                return str(node)
+            if isinstance(node, list):
+                return " ".join(filter(None, [extract_text(x) for x in node]))
+            if isinstance(node, dict):
+                if node.get("tag") == "rt":  # omit ruby furigana annotations
+                    return ""
+                data = node.get("data")
+                if isinstance(data, dict) and data.get("content") in ("extra-info", "attribution", "xref"):
+                    return ""
+                return extract_text(node.get("content", ""))
+            return ""
+
+        def find_glossary_items(node):
+            if isinstance(node, dict):
+                data = node.get("data")
+                if isinstance(data, dict) and data.get("content") == "glossary":
+                    c = node.get("content", [])
+                    if isinstance(c, list):
+                        for li in c:
+                            t = extract_text(li)
+                            if t:
+                                yield t
+                    else:
+                        t = extract_text(c)
+                        if t:
+                            yield t
+                    return
+                if "content" in node:
+                    yield from find_glossary_items(node["content"])
+            elif isinstance(node, list):
+                for item in node:
+                    yield from find_glossary_items(item)
+
+        for g in raw_glossary:
+            if isinstance(g, (str, int, float)):
+                definitions.append(str(g))
+            elif isinstance(g, dict):
+                found = list(find_glossary_items(g.get("content", [])))
+                if found:
+                    definitions.extend(found)
+                else:
+                    fallback = extract_text(g.get("content", []))
+                    if fallback:
+                        definitions.append(fallback)
+
+        return definitions
+
     def _load_from_zip(self, zip_path: Path):
         with zipfile.ZipFile(zip_path, "r") as z:
             namelist = z.namelist()
@@ -114,14 +170,15 @@ class YomitanPyEngine(BaseDictEngine):
                             expr = row[0]
                             reading = row[1] if row[1] else expr
                             pos = [row[2]] if row[2] else []
-                            glossary = row[5] if isinstance(row[5], list) else [str(row[5])]
+                            glossary = row[5] if isinstance(row[5], list) else [row[5]]
+                            defs = self._parse_glossary(glossary)
                             
                             p = self.pitches.get(f"{expr}:{reading}", [])
                             
                             def_item = DictDefinition(
                                 word=expr,
                                 reading=reading,
-                                definitions=[str(g) for g in glossary if isinstance(g, (str, int, float))],
+                                definitions=defs,
                                 pitch=p,
                                 pos=pos,
                                 dict_name=title
@@ -149,11 +206,12 @@ class YomitanPyEngine(BaseDictEngine):
                         expr = row[0]
                         reading = row[1] if row[1] else expr
                         pos = [row[2]] if row[2] else []
-                        glossary = row[5] if isinstance(row[5], list) else [str(row[5])]
+                        glossary = row[5] if isinstance(row[5], list) else [row[5]]
+                        defs = self._parse_glossary(glossary)
                         def_item = DictDefinition(
                             word=expr,
                             reading=reading,
-                            definitions=[str(g) for g in glossary if isinstance(g, (str, int, float))],
+                            definitions=defs,
                             pitch=[],
                             pos=pos,
                             dict_name=title

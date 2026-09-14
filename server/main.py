@@ -7,12 +7,21 @@ from fastapi import FastAPI, File, UploadFile, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from server.config import SERVER_HOST, SERVER_PORT
+import re
+
+from server.config import SERVER_HOST, SERVER_PORT, SCREENSHOTS_DIR, ONLY_JAPANESE
 from server.discovery import DiscoveryServer
 from server.ocr.manager import get_ocr_engine
 from server.dict.manager import get_dict_engine
 from server.dict.base import TokenMatch
 from server.anki.anki_client import AnkiExporter
+
+# Unicode regex matching Japanese characters (Hiragana, Katakana, Kanji, Halfwidth Katakana)
+JAPANESE_CHAR_REGEX = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff66-\uff9f]")
+
+def is_japanese_text(text: str) -> bool:
+    """Return True if the text contains at least one Japanese character."""
+    return bool(JAPANESE_CHAR_REGEX.search(text))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("switch-ocr.server")
@@ -110,6 +119,12 @@ async def process_ocr(request: Request, file: Optional[UploadFile] = File(None))
     if not image_bytes or len(image_bytes) < 32:
         raise HTTPException(status_code=400, detail="Empty or invalid image data received.")
 
+    # Save incoming screenshot for inspection and debugging
+    try:
+        (SCREENSHOTS_DIR / "last_capture.jpg").write_bytes(image_bytes)
+    except Exception as e:
+        logger.debug(f"Could not save last_capture.jpg: {e}")
+
     ocr_engine = get_ocr_engine()
     dict_engine = get_dict_engine()
 
@@ -121,11 +136,20 @@ async def process_ocr(request: Request, file: Optional[UploadFile] = File(None))
 
     results: List[BoxResult] = []
     for block in detected_blocks:
+        clean_text = block.text.strip()
+        if not clean_text:
+            continue
+
+        # Filter non-Japanese text (e.g., overlay menu labels, English HUD)
+        if ONLY_JAPANESE and not is_japanese_text(clean_text):
+            logger.info(f"Skipping non-Japanese text: '{clean_text}'")
+            continue
+
         # Query dictionary for each detected sentence/block
-        tokens = dict_engine.lookup_sentence(block.text)
+        tokens = dict_engine.lookup_sentence(clean_text)
         results.append(BoxResult(
             box=block.box,
-            text=block.text,
+            text=clean_text,
             confidence=block.confidence,
             tokens=tokens
         ))

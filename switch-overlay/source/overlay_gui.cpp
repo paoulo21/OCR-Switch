@@ -27,7 +27,9 @@ OverlayGui::~OverlayGui() {}
 void OverlayGui::init() {
     m_config = ConfigManager::load();
     m_state = OverlayState::READY;
-    m_statusMessage = "Switch OCR Pret\nAppuyez sur [X] pour analyser";
+    m_statusMessage = "Capture & analyse OCR...";
+    // Auto-scan immediately upon opening overlay
+    triggerScan();
 }
 
 void OverlayGui::triggerScan() {
@@ -60,8 +62,8 @@ void OverlayGui::triggerScan() {
         return;
     }
 
-    // 4. HTTP OCR request (3s timeout)
-    OCRResponse resp = HttpClient::performOcr(m_config.server_ip, m_config.server_port, jpeg.data(), jpeg.size(), 3);
+    // 4. HTTP OCR request (6s timeout)
+    OCRResponse resp = HttpClient::performOcr(m_config.server_ip, m_config.server_port, jpeg.data(), jpeg.size(), 6);
     if (!resp.success) {
         m_state = OverlayState::ERROR;
         m_statusMessage = resp.error_message.empty() ? ("Serveur injoignable:\n" + m_config.server_ip + ":" + std::to_string(m_config.server_port)) : resp.error_message;
@@ -160,41 +162,59 @@ void OverlayGui::update() {
 
 #ifdef __SWITCH__
 bool OverlayGui::handleInput(u64 keysDown, u64 keysHeld, const HidTouchState &touchPos, HidAnalogStickState leftJoyStick, HidAnalogStickState rightJoyStick) {
-    // Touch screen handling
-    if (touchPos.x > 0 && touchPos.y > 0) {
-        selectTokenAt(touchPos.x, touchPos.y);
+    if (m_state == OverlayState::READY && !m_ocrData.boxes.empty()) {
+        int numBoxes = (int)m_ocrData.boxes.size();
+
+        // 1. D-Pad Up / Down (or Left Stick Up / Down): cycle sentences
+        bool goUp = (keysDown & HidNpadButton_Up) || (leftJoyStick.y > 18000 && !(keysHeld & HidNpadButton_Up));
+        bool goDown = (keysDown & HidNpadButton_Down) || (leftJoyStick.y < -18000 && !(keysHeld & HidNpadButton_Down));
+
+        if (goUp) {
+            m_cursor.active_box_idx = (m_cursor.active_box_idx - 1 + numBoxes) % numBoxes;
+            const auto& box = m_ocrData.boxes[m_cursor.active_box_idx];
+            m_cursor.active_token_idx = box.tokens.empty() ? -1 : 0;
+            m_cursor.current_def_page = 0;
+            return true;
+        }
+        if (goDown) {
+            m_cursor.active_box_idx = (m_cursor.active_box_idx + 1) % numBoxes;
+            const auto& box = m_ocrData.boxes[m_cursor.active_box_idx];
+            m_cursor.active_token_idx = box.tokens.empty() ? -1 : 0;
+            m_cursor.current_def_page = 0;
+            return true;
+        }
+
+        // 2. D-Pad Left / Right (or Left Stick Left / Right): cycle words within active sentence
+        if (m_cursor.active_box_idx >= 0 && m_cursor.active_box_idx < numBoxes) {
+            const auto& box = m_ocrData.boxes[m_cursor.active_box_idx];
+            if (!box.tokens.empty()) {
+                int numTokens = (int)box.tokens.size();
+                if ((keysDown & HidNpadButton_Right) || (leftJoyStick.x > 18000)) {
+                    m_cursor.active_token_idx = (m_cursor.active_token_idx + 1) % numTokens;
+                    m_cursor.current_def_page = 0;
+                    return true;
+                }
+                if ((keysDown & HidNpadButton_Left) || (leftJoyStick.x < -18000)) {
+                    m_cursor.active_token_idx = (m_cursor.active_token_idx - 1 + numTokens) % numTokens;
+                    m_cursor.current_def_page = 0;
+                    return true;
+                }
+            }
+        }
     }
 
-    // D-Pad and Analog Stick movement
-    int dx = 0;
-    int dy = 0;
-    int speed = m_config.cursor_speed;
-
-    if (keysHeld & HidNpadButton_Left)  dx -= speed;
-    if (keysHeld & HidNpadButton_Right) dx += speed;
-    if (keysHeld & HidNpadButton_Up)    dy -= speed;
-    if (keysHeld & HidNpadButton_Down)  dy += speed;
-
-    if (std::abs(leftJoyStick.x) > 8000) {
-        dx += (leftJoyStick.x > 0 ? speed : -speed);
-    }
-    if (std::abs(leftJoyStick.y) > 8000) {
-        dy += (leftJoyStick.y > 0 ? -speed : speed);
-    }
-
-    if (dx != 0 || dy != 0) {
-        updateCursorPosition(dx, dy);
-    }
-
-    // Button A or R: cycle definitions / next token
+    // Button A or R: cycle definitions of active word
     if ((keysDown & HidNpadButton_A) || (keysDown & HidNpadButton_R)) {
         if (m_cursor.active_box_idx >= 0 && m_cursor.active_box_idx < (int)m_ocrData.boxes.size()) {
             const auto& box = m_ocrData.boxes[m_cursor.active_box_idx];
-            if (box.tokens.size() > 1) {
-                m_cursor.active_token_idx = (m_cursor.active_token_idx + 1) % box.tokens.size();
-                m_cursor.current_def_page = 0;
-            } else if (!box.tokens.empty() && box.tokens[0].definitions.size() > 1) {
-                m_cursor.current_def_page = (m_cursor.current_def_page + 1) % box.tokens[0].definitions.size();
+            if (m_cursor.active_token_idx >= 0 && m_cursor.active_token_idx < (int)box.tokens.size()) {
+                const auto& token = box.tokens[m_cursor.active_token_idx];
+                if (token.definitions.size() > 1) {
+                    m_cursor.current_def_page = (m_cursor.current_def_page + 1) % token.definitions.size();
+                } else if (box.tokens.size() > 1) {
+                    m_cursor.active_token_idx = (m_cursor.active_token_idx + 1) % box.tokens.size();
+                    m_cursor.current_def_page = 0;
+                }
             }
         }
         return true;
@@ -231,6 +251,7 @@ void OverlayGui::render(tsl::gfx::Renderer* renderer, s32 frameX, s32 frameY, s3
     constexpr tsl::Color colTextGray = { 0xA, 0xA, 0xA, 0xF };
     constexpr tsl::Color colCardBg = { 0x1, 0x1, 0x2, 0xF };
     constexpr tsl::Color colCardBorder = { 0x0, 0x9, 0xF, 0xF };
+    constexpr tsl::Color colHighlight = { 0x2, 0x2, 0x4, 0xF };
 
     // 1. Status header / Notification
     s32 contentStartY = frameY + 45;
@@ -251,18 +272,35 @@ void OverlayGui::render(tsl::gfx::Renderer* renderer, s32 frameX, s32 frameY, s3
     }
 
     // 2. Display detected content / Active token definition
-    if (m_state == OverlayState::READY && m_cursor.active_box_idx >= 0 && m_cursor.active_box_idx < (int)m_ocrData.boxes.size()) {
+    if (m_state == OverlayState::READY && !m_ocrData.boxes.empty()) {
+        int numBoxes = (int)m_ocrData.boxes.size();
+        if (m_cursor.active_box_idx < 0) m_cursor.active_box_idx = 0;
+        if (m_cursor.active_box_idx >= numBoxes) m_cursor.active_box_idx = numBoxes - 1;
+
         const auto& box = m_ocrData.boxes[m_cursor.active_box_idx];
-        s32 cardY = contentStartY;
+
+        // Phrase index header
+        std::string phraseBadge = "Phrase " + std::to_string(m_cursor.active_box_idx + 1) + "/" + std::to_string(numBoxes);
+        if (numBoxes > 1) {
+            phraseBadge += "  (\u25B2/\u25BC changer)";
+        }
+        renderer->drawString(phraseBadge.c_str(), false, frameX + 12, contentStartY + 14, 15.0f, tsl::gfx::Renderer::a(colTextYellow));
+
+        // Full detected sentence box
+        s32 sentBoxY = contentStartY + 24;
+        renderer->drawRect(frameX + 8, sentBoxY, frameW - 16, 52, tsl::gfx::Renderer::a(colHighlight));
+        renderer->drawRect(frameX + 8, sentBoxY, frameW - 16, 1, tsl::gfx::Renderer::a(colCardBorder));
+        renderer->drawString(box.text.c_str(), false, frameX + 14, sentBoxY + 28, 17.0f, tsl::gfx::Renderer::a(colTextWhite));
+
+        // Word definition card
+        s32 cardY = sentBoxY + 60;
+        renderer->drawRect(frameX + 8, cardY, frameW - 16, 180, tsl::gfx::Renderer::a(colCardBg));
+        renderer->drawRect(frameX + 8, cardY, frameW - 16, 2, tsl::gfx::Renderer::a(colCardBorder));
 
         if (!box.tokens.empty() && m_cursor.active_token_idx >= 0 && m_cursor.active_token_idx < (int)box.tokens.size()) {
             const auto& token = box.tokens[m_cursor.active_token_idx];
 
-            // Card background & border
-            renderer->drawRect(frameX, cardY, frameW, 280, tsl::gfx::Renderer::a(colCardBg));
-            renderer->drawRect(frameX, cardY, frameW, 2, tsl::gfx::Renderer::a(colCardBorder));
-
-            // Word & Reading
+            // Word & Reading header
             std::string header = token.word;
             if (!token.reading.empty() && token.reading != token.word) {
                 header += " [" + token.reading + "]";
@@ -270,39 +308,53 @@ void OverlayGui::render(tsl::gfx::Renderer* renderer, s32 frameX, s32 frameY, s3
             if (!token.pitch.empty()) {
                 header += "  P:" + token.pitch[0];
             }
-            renderer->drawString(header.c_str(), false, frameX + 10, cardY + 30, 22.0f, tsl::gfx::Renderer::a(colTextWhite));
+            renderer->drawString(header.c_str(), false, frameX + 16, cardY + 28, 21.0f, tsl::gfx::Renderer::a(colTextWhite));
 
             // Definitions
-            s32 defY = cardY + 65;
+            s32 defY = cardY + 60;
             if (!token.definitions.empty()) {
                 size_t page = m_cursor.current_def_page % token.definitions.size();
                 std::string defLine = std::to_string(page + 1) + ". " + token.definitions[page];
-                renderer->drawString(defLine.c_str(), false, frameX + 10, defY, 16.0f, tsl::gfx::Renderer::a(colTextCyan));
+                renderer->drawString(defLine.c_str(), false, frameX + 16, defY, 15.0f, tsl::gfx::Renderer::a(colTextCyan));
+            } else {
+                renderer->drawString("(Aucune definition trouvee)", false, frameX + 16, defY, 14.0f, tsl::gfx::Renderer::a(colTextGray));
             }
 
-            // Context sentence
-            std::string ctx = "Texte: " + box.text;
-            renderer->drawString(ctx.c_str(), false, frameX + 10, cardY + 200, 14.0f, tsl::gfx::Renderer::a(colTextGray));
-
-            // Token navigation counter
-            std::string count = "Mot " + std::to_string(m_cursor.active_token_idx + 1) + "/" + std::to_string(box.tokens.size()) + " (A: Suivant)";
-            renderer->drawString(count.c_str(), false, frameX + 10, cardY + 250, 14.0f, tsl::gfx::Renderer::a(colTextYellow));
+            // Word navigation counter
+            std::string count = "Mot " + std::to_string(m_cursor.active_token_idx + 1) + "/" + std::to_string(box.tokens.size()) + "  (\u25C4/\u25BA changer, A: def)";
+            renderer->drawString(count.c_str(), false, frameX + 16, cardY + 150, 13.0f, tsl::gfx::Renderer::a(colTextYellow));
         } else {
-            // Box raw text
-            renderer->drawRect(frameX, cardY, frameW, 100, tsl::gfx::Renderer::a(colCardBg));
-            std::string raw = "Texte: " + box.text;
-            renderer->drawString(raw.c_str(), false, frameX + 10, cardY + 40, 16.0f, tsl::gfx::Renderer::a(colTextWhite));
+            renderer->drawString("(Aucun mot japonais identifie)", false, frameX + 16, cardY + 40, 15.0f, tsl::gfx::Renderer::a(colTextGray));
+        }
+
+        // 3. List of ALL detected sentences on screen (so the user never gets lost)
+        if (numBoxes > 1) {
+            s32 listY = cardY + 195;
+            renderer->drawString("--- Toutes les phrases detectees ---", false, frameX + 12, listY, 13.0f, tsl::gfx::Renderer::a(colTextGray));
+            s32 itemY = listY + 20;
+
+            for (int i = 0; i < numBoxes && i < 5; ++i) {
+                bool isActive = (i == m_cursor.active_box_idx);
+                std::string line = (isActive ? "\u25B6 " : "  ") + std::to_string(i + 1) + ". " + m_ocrData.boxes[i].text;
+                if (line.size() > 36) {
+                    line = line.substr(0, 33) + "...";
+                }
+                tsl::Color col = isActive ? colTextYellow : colTextGray;
+                renderer->drawString(line.c_str(), false, frameX + 12, itemY, 14.0f, tsl::gfx::Renderer::a(col));
+                itemY += 22;
+            }
         }
     } else if (m_state == OverlayState::SCANNING) {
         renderer->drawString("Traitement en cours...", false, frameX + 10, contentStartY + 20, 18.0f, tsl::gfx::Renderer::a(colTextCyan));
     } else if (m_state == OverlayState::READY && m_ocrData.boxes.empty() && m_statusMessage.empty()) {
-        renderer->drawString("Aucun texte detecte.", false, frameX + 10, frameY + 80, 18.0f, tsl::gfx::Renderer::a(colTextGray));
+        renderer->drawString("Aucun texte japonais detecte.", false, frameX + 10, frameY + 80, 18.0f, tsl::gfx::Renderer::a(colTextGray));
+        renderer->drawString("Appuyez sur [X] pour rescanner.", false, frameX + 10, frameY + 110, 14.0f, tsl::gfx::Renderer::a(colTextCyan));
     }
 
-    // 3. Bottom controls footer
+    // 4. Bottom controls footer
     s32 footerY = frameY + frameH - 40;
     renderer->drawRect(frameX, footerY, frameW, 40, tsl::gfx::Renderer::a(colCardBg));
-    renderer->drawString("\uE0E0 Def  \uE0E3 Anki  \uE0E2 Scan  \uE0E1 Retour", false, frameX + 10, footerY + 26, 15.0f, tsl::gfx::Renderer::a(colTextWhite));
+    renderer->drawString("\u25B2\u25BC Phrase  \u25C4\u25BA Mot  \uE0E0 Def  \uE0E3 Anki  \uE0E2 Scan", false, frameX + 10, footerY + 26, 14.0f, tsl::gfx::Renderer::a(colTextWhite));
 }
 #endif
 

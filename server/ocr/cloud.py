@@ -27,10 +27,20 @@ class CloudOCREngine(BaseOCREngine):
         try:
             img = Image.open(io.BytesIO(image_bytes))
             img_w, img_h = img.size
+            # Downscale slightly if image is large for faster upload and faster Gemini vision latency
+            max_dim = 1024
+            if max(img_w, img_h) > max_dim:
+                scale = max_dim / float(max(img_w, img_h))
+                new_w, new_h = int(img_w * scale), int(img_h * scale)
+                resized = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+                buf = io.BytesIO()
+                resized.save(buf, format="JPEG", quality=85)
+                b64_image = base64.b64encode(buf.getvalue()).decode("utf-8")
+            else:
+                b64_image = base64.b64encode(image_bytes).decode("utf-8")
         except Exception:
             img_w, img_h = 1280, 720
-
-        b64_image = base64.b64encode(image_bytes).decode("utf-8")
+            b64_image = base64.b64encode(image_bytes).decode("utf-8")
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
 
         prompt = (

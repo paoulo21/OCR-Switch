@@ -44,7 +44,12 @@ bool ScreenCapture::captureJpeg(std::vector<uint8_t>& outJpegBuffer) {
     outJpegBuffer.resize(MAX_JPEG_SIZE);
 
     u64 actualSize = 0;
-    Result rc = capsscCaptureJpegScreenShot(&actualSize, outJpegBuffer.data(), MAX_JPEG_SIZE, ViLayerStack_Default, 100000000LL);
+    // Prefer capturing application layer directly (excludes Tesla overlay and OS menus)
+    Result rc = capsscCaptureJpegScreenShot(&actualSize, outJpegBuffer.data(), MAX_JPEG_SIZE, ViLayerStack_ApplicationForScreenshots, 100000000LL);
+    if (R_FAILED(rc) || actualSize == 0) {
+        // Fallback to default composite layer
+        rc = capsscCaptureJpegScreenShot(&actualSize, outJpegBuffer.data(), MAX_JPEG_SIZE, ViLayerStack_Default, 100000000LL);
+    }
     if (R_SUCCEEDED(rc) && actualSize > 0) {
         outJpegBuffer.resize(actualSize);
         return true;
