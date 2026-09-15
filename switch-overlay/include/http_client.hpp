@@ -25,6 +25,12 @@ public:
         const std::string& sentence,
         int timeoutSec = 3
     );
+
+    static bool testConnection(
+        const std::string& serverIp,
+        int serverPort,
+        int timeoutSec = 2
+    );
 };
 
 } // namespace switch_ocr

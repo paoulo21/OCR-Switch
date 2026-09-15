@@ -302,4 +302,28 @@ bool HttpClient::exportAnki(
            httpResp.body.find("\"success\": true") != std::string::npos;
 }
 
+bool HttpClient::testConnection(const std::string& serverIp, int serverPort, int timeoutSec) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return false;
+
+    struct timeval tv;
+    tv.tv_sec = timeoutSec;
+    tv.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+
+    struct sockaddr_in serverAddr;
+    std::memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(serverPort);
+    if (inet_pton(AF_INET, serverIp.c_str(), &serverAddr.sin_addr) <= 0) {
+        close(sock);
+        return false;
+    }
+
+    int res = connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+    close(sock);
+    return (res == 0);
+}
+
 } // namespace switch_ocr

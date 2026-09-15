@@ -30,24 +30,39 @@ logger = logging.getLogger("switch-ocr.server")
 discovery_service = DiscoveryServer()
 anki_exporter = AnkiExporter()
 
-def get_local_lan_ip() -> str:
+def get_local_lan_ips() -> List[str]:
     import socket
+    ips = []
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
+        primary = s.getsockname()[0]
         s.close()
-        return ip
+        if primary and primary != "127.0.0.1":
+            ips.append(primary)
     except Exception:
-        return "127.0.0.1"
+        pass
+
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except Exception:
+        pass
+
+    return ips or ["127.0.0.1"]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    local_ip = get_local_lan_ip()
+    local_ips = get_local_lan_ips()
+    primary_ip = local_ips[0]
+    extra_ips = f" (autres: {', '.join(local_ips[1:])})" if len(local_ips) > 1 else ""
     logger.info("=" * 60)
     logger.info("  SWITCH OCR SERVER ACTIF")
-    logger.info(f"  IP DE VOTRE APPAREIL      : {local_ip}")
+    logger.info(f"  IP DE VOTRE APPAREIL      : {primary_ip}{extra_ips}")
     logger.info(f"  Port HTTP                 : {SERVER_PORT}")
     logger.info(f"  Port Decouverte UDP       : {discovery_service.port}")
     logger.info("=" * 60)
