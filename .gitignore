@@ -7,3 +7,6 @@ venv/
 .env
 .DS_Store
 Thumbs.db
+data/switch_ip.txt
+data/screenshots/
+*.sqlite3
